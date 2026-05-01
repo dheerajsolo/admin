@@ -1,174 +1,304 @@
-from __future__ import annotations
-
+from pathlib import Path
 import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
 
-from config import settings
-from utils.helpers import load_css, require_login
 from components.sidebar import render_sidebar
-from components.cards import page_header, metric_card
-from services.order_service import order_summary
-from services.product_service import product_summary
-from services.report_service import get_sales_series, top_categories
-from services.order_service import get_orders_df
-from services.product_service import get_products_df
-from services.shipping_service import get_shipments_df
-from utils.formatters import money, number
+from services.order_service import get_orders
+from services.product_service import get_products
 
-import plotly.express as px
 
 st.set_page_config(
-    page_title="Jewlio Admin",
-    page_icon="💎",
+    page_title="Jewlio Dashboard",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
-load_css()
-
-if not require_login(settings.app_password):
-    st.stop()
-
-page = render_sidebar()
 
 
-def dashboard_page() -> None:
-    page_header("Welcome back, Dheeraj", "Here are today's stats from your store")
+def load_css():
+    css_file = Path("assets/style.css")
+    if css_file.exists():
+        st.markdown(f"<style>{css_file.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
-    orders = order_summary()
-    products = product_summary()
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        metric_card("Total Sales", money(orders["sales"]), "+12.5%", "good", dark=True)
-    with c2:
-        metric_card("Total Orders", number(orders["orders"]), "+8 orders", "good")
-    with c3:
-        metric_card("Pending Shipments", number(orders["pending"]), "Need action", "warn")
-    with c4:
-        metric_card("Low Stock", number(products["low_stock"] + products["out_stock"]), "Check inventory", "bad")
+def money(val):
+    try:
+        return f"₹{float(val):,.0f}"
+    except Exception:
+        return "₹0"
 
-    left, right = st.columns([2.1, 1])
+
+def to_float(value):
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
+
+
+def prepare_orders_df():
+    data = get_orders()
+    df = pd.DataFrame(data)
+
+    if df.empty:
+        return df
+
+    for col in ["total", "remaining_cod", "paid_amount"]:
+        if col in df.columns:
+            df[col] = df[col].apply(to_float)
+
+    return df
+
+
+def prepare_products_df():
+    data = get_products()
+    df = pd.DataFrame(data)
+
+    if df.empty:
+        return df
+
+    if "stock_quantity" in df.columns:
+        df["stock_quantity"] = pd.to_numeric(df["stock_quantity"], errors="coerce").fillna(0)
+
+    return df
+
+
+def metric_card(title, value, badge_text, badge_type="soft", dark=False):
+    dark_class = "dark" if dark else ""
+    return f"""
+    <div class="metric-card {dark_class}">
+        <div class="metric-label">{title}</div>
+        <div class="metric-value">{value}</div>
+        <span class="metric-badge {badge_type}">{badge_text}</span>
+    </div>
+    """
+
+
+def info_header():
+    left, right = st.columns([4, 2])
+
     with left:
-        st.markdown("<div class='panel-title'>Sales Performance</div><div class='subtle'>Orders and revenue trend</div>", unsafe_allow_html=True)
-        chart_df = get_sales_series(14)
-        if not chart_df.empty:
-            fig = px.line(chart_df, x="Date", y="Revenue", markers=True)
-            fig.update_layout(height=360, margin=dict(l=0, r=0, t=20, b=0), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No sales data found.")
+        st.markdown(
+            """
+            <div class="top-header">
+                <div>
+                    <div class="page-title">Dashboard</div>
+                    <div class="page-subtitle">Welcome back. Here's what's happening with your business today.</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     with right:
-        st.markdown("<div class='panel-title'>Top Categories</div><div class='subtle'>Product category split</div>", unsafe_allow_html=True)
-        cat_df = top_categories()
-        if not cat_df.empty:
-            fig = px.pie(cat_df, names="Category", values="Products", hole=0.62)
-            fig.update_layout(height=360, margin=dict(l=0, r=0, t=20, b=0), paper_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No category data found.")
-
-    st.write("")
-    st.markdown("<div class='panel-title'>Recent Orders</div>", unsafe_allow_html=True)
-    st.dataframe(get_orders_df(8), use_container_width=True, hide_index=True)
+        st.markdown(
+            '<div style="display:flex; justify-content:flex-end; margin-top:8px;"><div class="search-box">Search anything...</div></div>',
+            unsafe_allow_html=True,
+        )
 
 
-def orders_page() -> None:
-    page_header("Orders", "View, filter and export store orders")
-    df = get_orders_df(80)
+def sales_chart(df):
+    if df.empty or "date" not in df.columns or "total" not in df.columns:
+        fig = go.Figure()
+        fig.update_layout(
+            height=340,
+            margin=dict(l=10, r=10, t=10, b=10),
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+        )
+        return fig
+
+    temp = df.copy()
+    temp["date"] = pd.to_datetime(temp["date"], errors="coerce")
+    temp = temp.dropna(subset=["date"])
+    temp = temp.sort_values("date")
+
+    daily = temp.groupby(temp["date"].dt.date, as_index=False)["total"].sum()
+    daily["date"] = pd.to_datetime(daily["date"])
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=daily["date"],
+            y=daily["total"],
+            mode="lines",
+            line=dict(color="#02224F", width=3),
+            fill="tozeroy",
+            fillcolor="rgba(2,34,79,0.10)",
+            name="Revenue",
+        )
+    )
+
+    fig.update_layout(
+        height=340,
+        margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        showlegend=False,
+        xaxis_title="",
+        yaxis_title="",
+    )
+
+    fig.update_xaxes(showgrid=False, color="#5E6B75")
+    fig.update_yaxes(showgrid=True, gridcolor="#E1E7EB", color="#5E6B75")
+
+    return fig
+
+
+def category_chart(products_df):
+    if products_df.empty or "category" not in products_df.columns:
+        fig = go.Figure()
+        fig.update_layout(
+            height=260,
+            margin=dict(l=10, r=10, t=10, b=10),
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+        )
+        return fig
+
+    temp = products_df.copy()
+    temp["category"] = temp["category"].fillna("Uncategorized")
+    top = temp["category"].value_counts().head(5)
+
+    labels = list(top.index)
+    values = list(top.values)
+
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=labels,
+                values=values,
+                hole=0.65,
+                textinfo="none",
+                marker=dict(
+                    colors=["#02224F", "#25343F", "#BFC9D1", "#8EA1B2", "#D9E0E5"]
+                ),
+            )
+        ]
+    )
+
+    fig.update_layout(
+        height=260,
+        margin=dict(l=10, r=10, t=10, b=10),
+        showlegend=True,
+        legend=dict(orientation="v", font=dict(size=11)),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+    )
+    return fig
+
+
+def recent_orders_table(df):
     if df.empty:
-        st.warning("No orders found.")
+        st.info("No orders found.")
         return
 
-    f1, f2, f3 = st.columns(3)
-    with f1:
-        status = st.selectbox("Order Status", ["All"] + sorted(df["Order Status"].dropna().astype(str).unique().tolist()))
-    with f2:
-        payment = st.selectbox("Payment", ["All"] + sorted(df["Payment"].dropna().astype(str).unique().tolist()))
-    with f3:
-        search = st.text_input("Search", placeholder="Order ID, customer, city, SKU")
+    show_cols = []
+    preferred = ["order_id", "date", "customer", "phone", "city", "product", "sku", "qty", "total", "status"]
+    for c in preferred:
+        if c in df.columns:
+            show_cols.append(c)
 
-    view = df.copy()
-    if status != "All":
-        view = view[view["Order Status"].astype(str) == status]
-    if payment != "All":
-        view = view[view["Payment"].astype(str) == payment]
-    if search:
-        mask = view.astype(str).apply(lambda row: row.str.contains(search, case=False, na=False).any(), axis=1)
-        view = view[mask]
+    table_df = df[show_cols].copy().head(8)
 
-    st.download_button("Download Orders CSV", view.to_csv(index=False).encode("utf-8"), "orders.csv", "text/csv")
-    st.dataframe(view, use_container_width=True, height=620, hide_index=True)
+    if "total" in table_df.columns:
+        table_df["total"] = table_df["total"].apply(money)
+
+    st.dataframe(table_df, use_container_width=True, hide_index=True)
 
 
-def inventory_page() -> None:
-    page_header("Inventory", "Track products, SKU and stock levels")
-    df = get_products_df()
-    if df.empty:
-        st.warning("No products found.")
-        return
+load_css()
+render_sidebar("Dashboard")
 
-    c1, c2, c3 = st.columns(3)
-    summary = product_summary()
-    with c1:
-        metric_card("Products", number(summary["products"]), "Total SKUs", "good")
-    with c2:
-        metric_card("Low Stock", number(summary["low_stock"]), "Restock soon", "warn")
-    with c3:
-        metric_card("Out of Stock", number(summary["out_stock"]), "Urgent", "bad")
+orders_df = prepare_orders_df()
+products_df = prepare_products_df()
 
-    status = st.selectbox("Stock Filter", ["All"] + sorted(df["Status"].dropna().astype(str).unique().tolist()))
-    view = df if status == "All" else df[df["Status"].astype(str) == status]
-    st.dataframe(view, use_container_width=True, height=620, hide_index=True)
+info_header()
 
+total_sales = orders_df["total"].sum() if not orders_df.empty and "total" in orders_df.columns else 0
+total_orders = len(orders_df)
+pending_shipments = len(orders_df[orders_df["status"].astype(str).str.lower().isin(["processing", "pending", "on-hold"])]) if not orders_df.empty and "status" in orders_df.columns else 0
+low_stock = len(products_df[products_df["stock_quantity"] <= 5]) if not products_df.empty and "stock_quantity" in products_df.columns else 0
 
-def shipping_page() -> None:
-    page_header("Shipping", "Shiprocket workflow and shipment status")
-    df = get_shipments_df()
-    if df.empty:
-        st.info("Shipping data will appear here after Shiprocket integration.")
-        return
-    status = st.selectbox("Shipment Status", ["All"] + sorted(df["Status"].dropna().astype(str).unique().tolist()))
-    view = df if status == "All" else df[df["Status"].astype(str) == status]
-    st.dataframe(view, use_container_width=True, height=620, hide_index=True)
+c1, c2, c3, c4 = st.columns(4)
 
+with c1:
+    st.markdown(metric_card("Total Revenue", money(total_sales), "+ good growth", "success", dark=True), unsafe_allow_html=True)
+with c2:
+    st.markdown(metric_card("Total Orders", f"{total_orders:,}", "live orders", "soft"), unsafe_allow_html=True)
+with c3:
+    st.markdown(metric_card("Pending Shipments", f"{pending_shipments:,}", "needs attention", "warn"), unsafe_allow_html=True)
+with c4:
+    st.markdown(metric_card("Low Stock", f"{low_stock:,}", "check inventory", "soft"), unsafe_allow_html=True)
 
-def returns_page() -> None:
-    page_header("Returns / RTO", "Track failed delivery, RTO and returns")
-    df = get_orders_df(80)
-    if df.empty:
-        st.info("No return data found.")
-        return
-    mask = df["Order Status"].astype(str).str.contains("rto|failed|cancelled|return", case=False, na=False)
-    st.dataframe(df[mask], use_container_width=True, height=620, hide_index=True)
+st.markdown('<div class="section-gap"></div>', unsafe_allow_html=True)
 
+left, right = st.columns([2.2, 1])
 
-def reports_page() -> None:
-    page_header("Reports", "Daily sales, payment and category reports")
-    sales = get_sales_series(30)
-    if not sales.empty:
-        st.dataframe(sales, use_container_width=True, hide_index=True)
-        st.download_button("Download Sales Report", sales.to_csv(index=False).encode("utf-8"), "sales_report.csv", "text/csv")
-    else:
-        st.info("No report data found.")
+with left:
+    st.markdown(
+        """
+        <div class="panel-card">
+            <div class="panel-title">Overview</div>
+            <div class="panel-subtitle">Revenue trend from your recent orders</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    fig = sales_chart(orders_df)
+    st.plotly_chart(fig, use_container_width=True)
 
+with right:
+    st.markdown(
+        """
+        <div class="panel-card">
+            <div class="panel-title">Top Categories</div>
+            <div class="panel-subtitle">Where your products are concentrated</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    cat_fig = category_chart(products_df)
+    st.plotly_chart(cat_fig, use_container_width=True)
 
-def settings_page() -> None:
-    page_header("Settings", "Current dashboard configuration")
-    st.code(f"API_PROVIDER={settings.api_provider}\nWC_SITE_URL={settings.wc_site_url}\nCACHE_TTL_SECONDS={settings.cache_ttl_seconds}")
-    st.info("API keys are read from Streamlit Secrets or .env. Never commit real keys to GitHub.")
+    st.markdown(
+        """
+        <div class="panel-card" style="margin-top:16px;">
+            <div class="panel-title">Monthly Goals</div>
+            <div class="panel-subtitle">Track progress toward targets</div>
 
+            <div class="goal-row">
+                <div class="goal-label">Revenue</div>
+                <div class="progress-wrap"><div class="progress-fill" style="width:78%;"></div></div>
+                <div class="goal-meta">Current progress: 78%</div>
+            </div>
 
-if page == "Dashboard":
-    dashboard_page()
-elif page == "Orders":
-    orders_page()
-elif page == "Inventory":
-    inventory_page()
-elif page == "Shipping":
-    shipping_page()
-elif page == "Returns":
-    returns_page()
-elif page == "Reports":
-    reports_page()
-else:
-    settings_page()
+            <div class="goal-row">
+                <div class="goal-label">Orders</div>
+                <div class="progress-wrap"><div class="progress-fill" style="width:64%; background:#25343F;"></div></div>
+                <div class="goal-meta">Current progress: 64%</div>
+            </div>
+
+            <div class="goal-row">
+                <div class="goal-label">Inventory Health</div>
+                <div class="progress-wrap"><div class="progress-fill" style="width:86%; background:#BFC9D1;"></div></div>
+                <div class="goal-meta">Current progress: 86%</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.markdown('<div class="section-gap"></div>', unsafe_allow_html=True)
+
+st.markdown(
+    """
+    <div class="table-card">
+        <div class="table-title">Recent Orders</div>
+        <div class="table-subtitle">Latest transactions from your store</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+recent_orders_table(orders_df)
