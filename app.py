@@ -246,37 +246,6 @@ def load_css():
             margin-bottom: 12px;
         }
 
-        .goal-row {
-            margin-top: 18px;
-        }
-
-        .goal-label {
-            font-size: 13px;
-            font-weight: 800;
-            color: var(--text);
-            margin-bottom: 8px;
-        }
-
-        .goal-meta {
-            font-size: 12px;
-            color: var(--soft-text);
-            margin-top: 6px;
-        }
-
-        .progress-wrap {
-            width: 100%;
-            height: 9px;
-            background: #E5EAEE;
-            border-radius: 999px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: var(--primary);
-            border-radius: 999px;
-        }
-
         [data-testid="stDataFrame"] {
             border-radius: 16px;
             overflow: hidden;
@@ -287,6 +256,18 @@ def load_css():
             border-radius: 20px 20px 0 0;
             border-bottom: 0;
             margin-bottom: 0;
+        }
+
+        /* Native Streamlit progress style */
+        .stProgress > div > div > div > div {
+            background-color: #02224F !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            border-radius: 20px !important;
+            border-color: #D6DEE4 !important;
+            background: #FFFFFF !important;
+            box-shadow: 0 1px 3px rgba(2, 34, 79, 0.06);
         }
 
         @media (max-width: 900px) {
@@ -598,38 +579,21 @@ with side_col:
 
     st.plotly_chart(category_chart(products_df), use_container_width=True)
 
-    html(
-        """
-        <div class="panel-card" style="margin-top:16px;">
-            <div class="panel-title">Monthly Goals</div>
-            <div class="panel-subtitle">Track progress toward targets</div>
+    with st.container(border=True):
+        st.markdown("### Monthly Goals")
+        st.caption("Track progress toward targets")
 
-            <div class="goal-row">
-                <div class="goal-label">Revenue</div>
-                <div class="progress-wrap">
-                    <div class="progress-fill" style="width:78%;"></div>
-                </div>
-                <div class="goal-meta">Current progress: 78%</div>
-            </div>
+        st.markdown("**Revenue**")
+        st.progress(78)
+        st.caption("Current progress: 78%")
 
-            <div class="goal-row">
-                <div class="goal-label">Orders</div>
-                <div class="progress-wrap">
-                    <div class="progress-fill" style="width:64%; background:#25343F;"></div>
-                </div>
-                <div class="goal-meta">Current progress: 64%</div>
-            </div>
+        st.markdown("**Orders**")
+        st.progress(64)
+        st.caption("Current progress: 64%")
 
-            <div class="goal-row">
-                <div class="goal-label">Inventory Health</div>
-                <div class="progress-wrap">
-                    <div class="progress-fill" style="width:86%; background:#BFC9D1;"></div>
-                </div>
-                <div class="goal-meta">Current progress: 86%</div>
-            </div>
-        </div>
-        """
-    )
+        st.markdown("**Inventory Health**")
+        st.progress(86)
+        st.caption("Current progress: 86%")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
