@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from textwrap import dedent
 
 from components.sidebar import render_sidebar
 from services.order_service import get_orders
@@ -15,8 +16,12 @@ st.set_page_config(
 )
 
 
+def html(content: str):
+    st.markdown(dedent(content), unsafe_allow_html=True)
+
+
 def load_css():
-    st.markdown(
+    html(
         """
         <style>
         :root {
@@ -47,12 +52,10 @@ def load_css():
             max-width: 1500px !important;
         }
 
-        /* Hide default Streamlit page navigation */
         [data-testid="stSidebarNav"] {
             display: none !important;
         }
 
-        /* Sidebar */
         [data-testid="stSidebar"] {
             background: var(--sidebar) !important;
             min-width: 250px !important;
@@ -91,6 +94,11 @@ def load_css():
             color: #FFFFFF !important;
         }
 
+        .active-nav button {
+            background: rgba(234, 239, 239, 0.16) !important;
+            color: #FFFFFF !important;
+        }
+
         .sidebar-brand {
             padding-bottom: 24px;
             border-bottom: 1px solid rgba(234,239,239,0.15);
@@ -119,7 +127,6 @@ def load_css():
             color: #BFC9D1 !important;
         }
 
-        /* Header */
         .page-title {
             color: var(--text);
             font-size: 24px;
@@ -141,7 +148,6 @@ def load_css():
             font-size: 14px;
         }
 
-        /* Metric cards */
         .metric-card {
             background: #FFFFFF;
             border: 1px solid var(--border);
@@ -277,15 +283,6 @@ def load_css():
             border: 1px solid var(--border);
         }
 
-        .chart-wrap {
-            background: #FFFFFF;
-            border: 1px solid var(--border);
-            border-top: 0;
-            border-radius: 0 0 20px 20px;
-            padding: 0 12px 12px 12px;
-            margin-top: -8px;
-        }
-
         .panel-card.chart-head {
             border-radius: 20px 20px 0 0;
             border-bottom: 0;
@@ -303,13 +300,8 @@ def load_css():
                 max-width: 220px !important;
             }
         }
-        .active-nav button {
-    background: rgba(234, 239, 239, 0.16) !important;
-    color: #FFFFFF !important;
-}
         </style>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -341,7 +333,18 @@ def normalize_orders(raw_orders):
 
     if df.empty:
         return pd.DataFrame(
-            columns=["order_id", "date", "total", "status", "customer", "phone", "city", "product", "sku", "qty"]
+            columns=[
+                "order_id",
+                "date",
+                "total",
+                "status",
+                "customer",
+                "phone",
+                "city",
+                "product",
+                "sku",
+                "qty",
+            ]
         )
 
     order_col = find_col(df, ["order_id", "id", "Order ID", "Order"])
@@ -394,13 +397,16 @@ def normalize_products(raw_products):
 
 def metric_card(title, value, badge_text, badge_type="soft", dark=False):
     dark_class = "dark" if dark else ""
-    return f"""
-    <div class="metric-card {dark_class}">
-        <div class="metric-label">{title}</div>
-        <div class="metric-value">{value}</div>
-        <span class="metric-badge {badge_type}">{badge_text}</span>
-    </div>
-    """
+
+    return dedent(
+        f"""
+        <div class="metric-card {dark_class}">
+            <div class="metric-label">{title}</div>
+            <div class="metric-value">{value}</div>
+            <span class="metric-badge {badge_type}">{badge_text}</span>
+        </div>
+        """
+    )
 
 
 def sales_chart(df):
@@ -439,6 +445,7 @@ def sales_chart(df):
         yaxis_title="",
         font=dict(color="#25343F"),
     )
+
     fig.update_xaxes(showgrid=False, color="#5E6B75")
     fig.update_yaxes(showgrid=True, gridcolor="#E1E7EB", color="#5E6B75")
 
@@ -485,7 +492,19 @@ def recent_orders_table(df):
         st.info("No orders found.")
         return
 
-    required_cols = ["order_id", "date", "customer", "phone", "city", "product", "sku", "qty", "total", "status"]
+    required_cols = [
+        "order_id",
+        "date",
+        "customer",
+        "phone",
+        "city",
+        "product",
+        "sku",
+        "qty",
+        "total",
+        "status",
+    ]
+
     for col in required_cols:
         if col not in df.columns:
             df[col] = ""
@@ -508,21 +527,17 @@ products_df = normalize_products(products_raw)
 left_head, right_head = st.columns([4, 1.3])
 
 with left_head:
-    st.markdown(
+    html(
         """
         <div>
             <div class="page-title">Dashboard</div>
             <div class="page-subtitle">Welcome back. Here's what's happening with your business today.</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 with right_head:
-    st.markdown(
-        '<div class="search-box">Search anything...</div>',
-        unsafe_allow_html=True,
-    )
+    html('<div class="search-box">Search anything...</div>')
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -544,60 +559,46 @@ else:
 c1, c2, c3, c4 = st.columns(4)
 
 with c1:
-    st.markdown(
-        metric_card("Total Revenue", money(total_sales), "+ good growth", "success", True),
-        unsafe_allow_html=True,
-    )
+    html(metric_card("Total Revenue", money(total_sales), "+ good growth", "success", True))
 
 with c2:
-    st.markdown(
-        metric_card("Total Orders", f"{total_orders:,}", "live orders", "soft"),
-        unsafe_allow_html=True,
-    )
+    html(metric_card("Total Orders", f"{total_orders:,}", "live orders", "soft"))
 
 with c3:
-    st.markdown(
-        metric_card("Pending Shipments", f"{pending_shipments:,}", "needs attention", "warn"),
-        unsafe_allow_html=True,
-    )
+    html(metric_card("Pending Shipments", f"{pending_shipments:,}", "needs attention", "warn"))
 
 with c4:
-    st.markdown(
-        metric_card("Low Stock", f"{low_stock:,}", "check inventory", "soft"),
-        unsafe_allow_html=True,
-    )
+    html(metric_card("Low Stock", f"{low_stock:,}", "check inventory", "soft"))
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 main_col, side_col = st.columns([2.2, 1])
 
 with main_col:
-    st.markdown(
+    html(
         """
         <div class="panel-card chart-head">
             <div class="panel-title">Overview</div>
             <div class="panel-subtitle">Revenue trend from your recent orders</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     st.plotly_chart(sales_chart(orders_df), use_container_width=True)
 
 with side_col:
-    st.markdown(
+    html(
         """
         <div class="panel-card chart-head">
             <div class="panel-title">Top Categories</div>
             <div class="panel-subtitle">Where your products are concentrated</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     st.plotly_chart(category_chart(products_df), use_container_width=True)
 
-    st.markdown(
+    html(
         """
         <div class="panel-card" style="margin-top:16px;">
             <div class="panel-title">Monthly Goals</div>
@@ -627,20 +628,18 @@ with side_col:
                 <div class="goal-meta">Current progress: 86%</div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-st.markdown(
+html(
     """
     <div class="table-card">
         <div class="table-title">Recent Orders</div>
         <div class="table-subtitle">Latest transactions from your store</div>
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
 
 recent_orders_table(orders_df)
