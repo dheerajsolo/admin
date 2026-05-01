@@ -303,6 +303,10 @@ def load_css():
                 max-width: 220px !important;
             }
         }
+        .active-nav button {
+    background: rgba(234, 239, 239, 0.16) !important;
+    color: #FFFFFF !important;
+}
         </style>
         """,
         unsafe_allow_html=True,
