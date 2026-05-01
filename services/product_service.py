@@ -28,11 +28,16 @@ def get_products(limit: int = 100) -> list[dict]:
     """
     Fetch products from active data adapter.
 
-    Current mode:
-    - demo adapter for demo data
-    - woocommerce adapter for live read-only WooCommerce data
+    Compatible with both:
+    - adapter.fetch_products()
+    - adapter.fetch_products(limit)
     """
-    return get_data_adapter().fetch_products(limit)
+    adapter = get_data_adapter()
+
+    try:
+        return adapter.fetch_products(limit)
+    except TypeError:
+        return adapter.fetch_products()
 
 
 def get_products_df(limit: int = 100) -> pd.DataFrame:
@@ -96,6 +101,8 @@ def product_summary(limit: int = 100) -> dict:
     stock_status = df["stock_status"].astype(str).str.lower()
     status = df["status"].astype(str).str.lower()
 
+    threshold = getattr(settings, "low_stock_threshold", 5)
+
     out_stock = int(
         ((stock_qty <= 0) | stock_status.str.contains("outofstock|out of stock", na=False)).sum()
     )
@@ -103,7 +110,7 @@ def product_summary(limit: int = 100) -> dict:
     low_stock = int(
         (
             (stock_qty > 0)
-            & (stock_qty <= settings.low_stock_threshold)
+            & (stock_qty <= threshold)
             & ~stock_status.str.contains("outofstock|out of stock", na=False)
         ).sum()
     )
