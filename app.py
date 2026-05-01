@@ -1,26 +1,35 @@
+from __future__ import annotations
+
 import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
 from textwrap import dedent
 
+from config import settings
 from components.sidebar import render_sidebar
-from services.order_service import get_orders
-from services.product_service import get_products
+
+from modules.overview.page import render_overview_page
+from modules.orders.page import render_orders_page
+from modules.inventory.page import render_inventory_page
+from modules.shipping.page import render_shipping_page
+from modules.blog.page import render_blog_page
+from modules.email_support.page import render_email_support_page
+from modules.push_notifications.page import render_push_notifications_page
+from modules.reports.page import render_reports_page
+from modules.settings.page import render_settings_page
 
 
 st.set_page_config(
     page_title="Jewlio Dashboard",
-    page_icon="📊",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 
-def html(content: str):
+def html(content: str) -> None:
     st.markdown(dedent(content), unsafe_allow_html=True)
 
 
-def load_css():
+def load_css() -> None:
     html(
         """
         <style>
@@ -36,9 +45,17 @@ def load_css():
             --white: #FFFFFF;
         }
 
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
+        #MainMenu {
+            visibility: hidden;
+        }
+
+        footer {
+            visibility: hidden;
+        }
+
+        header {
+            visibility: hidden;
+        }
 
         .stApp {
             background: var(--bg) !important;
@@ -91,11 +108,6 @@ def load_css():
 
         [data-testid="stSidebar"] .stButton > button:hover {
             background: rgba(234, 239, 239, 0.12) !important;
-            color: #FFFFFF !important;
-        }
-
-        .active-nav button {
-            background: rgba(234, 239, 239, 0.16) !important;
             color: #FFFFFF !important;
         }
 
@@ -213,6 +225,12 @@ def load_css():
             margin-bottom: 0;
         }
 
+        .panel-card.chart-head {
+            border-radius: 20px 20px 0 0;
+            border-bottom: 0;
+            margin-bottom: 0;
+        }
+
         .panel-title {
             color: var(--text);
             font-size: 17px;
@@ -252,13 +270,6 @@ def load_css():
             border: 1px solid var(--border);
         }
 
-        .panel-card.chart-head {
-            border-radius: 20px 20px 0 0;
-            border-bottom: 0;
-            margin-bottom: 0;
-        }
-
-        /* Native Streamlit progress style */
         .stProgress > div > div > div > div {
             background-color: #02224F !important;
         }
@@ -286,324 +297,59 @@ def load_css():
     )
 
 
-def money(value):
-    try:
-        return f"₹{float(value):,.0f}"
-    except Exception:
-        return "₹0"
+def check_login() -> bool:
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+
+    if st.session_state.logged_in:
+        return True
+
+    st.markdown("### Dashboard Login")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login", use_container_width=True):
+        if password == settings.app_password:
+            st.session_state.logged_in = True
+            st.rerun()
+        else:
+            st.error("Incorrect password")
+
+    return False
 
 
-def to_float(value):
-    try:
-        if value is None:
-            return 0.0
-        return float(str(value).replace(",", "").replace("₹", "").strip())
-    except Exception:
-        return 0.0
+def render_page(page_name: str) -> None:
+    if page_name == "Overview":
+        render_overview_page()
+    elif page_name == "Orders":
+        render_orders_page()
+    elif page_name == "Inventory":
+        render_inventory_page()
+    elif page_name == "Shipping":
+        render_shipping_page()
+    elif page_name == "Blog":
+        render_blog_page()
+    elif page_name == "Email Support":
+        render_email_support_page()
+    elif page_name == "Push Notifications":
+        render_push_notifications_page()
+    elif page_name == "Reports":
+        render_reports_page()
+    elif page_name == "Settings":
+        render_settings_page()
+    else:
+        render_overview_page()
 
 
-def find_col(df, possible_names):
-    for name in possible_names:
-        if name in df.columns:
-            return name
-    return None
+def main() -> None:
+    load_css()
 
-
-def normalize_orders(raw_orders):
-    df = pd.DataFrame(raw_orders)
-
-    if df.empty:
-        return pd.DataFrame(
-            columns=[
-                "order_id",
-                "date",
-                "total",
-                "status",
-                "customer",
-                "phone",
-                "city",
-                "product",
-                "sku",
-                "qty",
-            ]
-        )
-
-    order_col = find_col(df, ["order_id", "id", "Order ID", "Order"])
-    date_col = find_col(df, ["date", "date_created", "order_date", "Date"])
-    total_col = find_col(df, ["total", "order_total", "amount", "total_amount", "Total", "Amount"])
-    status_col = find_col(df, ["status", "order_status", "Status"])
-    customer_col = find_col(df, ["customer", "customer_name", "name", "Customer"])
-    phone_col = find_col(df, ["phone", "billing_phone", "Phone"])
-    city_col = find_col(df, ["city", "billing_city", "City"])
-    product_col = find_col(df, ["product", "products", "Product"])
-    sku_col = find_col(df, ["sku", "SKU"])
-    qty_col = find_col(df, ["qty", "quantity", "Qty"])
-
-    clean = pd.DataFrame()
-    clean["order_id"] = df[order_col] if order_col else ""
-    clean["date"] = df[date_col] if date_col else ""
-    clean["total"] = df[total_col].apply(to_float) if total_col else 0
-    clean["status"] = df[status_col] if status_col else ""
-    clean["customer"] = df[customer_col] if customer_col else ""
-    clean["phone"] = df[phone_col] if phone_col else ""
-    clean["city"] = df[city_col] if city_col else ""
-    clean["product"] = df[product_col] if product_col else ""
-    clean["sku"] = df[sku_col] if sku_col else ""
-    clean["qty"] = df[qty_col] if qty_col else ""
-
-    return clean
-
-
-def normalize_products(raw_products):
-    df = pd.DataFrame(raw_products)
-
-    if df.empty:
-        return pd.DataFrame(columns=["name", "sku", "stock_quantity", "category", "price"])
-
-    name_col = find_col(df, ["name", "product_name", "Product", "Name"])
-    sku_col = find_col(df, ["sku", "SKU"])
-    stock_col = find_col(df, ["stock_quantity", "stock", "Stock", "qty"])
-    category_col = find_col(df, ["category", "categories", "Category"])
-    price_col = find_col(df, ["price", "regular_price", "sale_price", "Price"])
-
-    clean = pd.DataFrame()
-    clean["name"] = df[name_col] if name_col else ""
-    clean["sku"] = df[sku_col] if sku_col else ""
-    clean["stock_quantity"] = df[stock_col].apply(to_float) if stock_col else 0
-    clean["category"] = df[category_col] if category_col else "Uncategorized"
-    clean["price"] = df[price_col].apply(to_float) if price_col else 0
-
-    return clean
-
-
-def metric_card(title, value, badge_text, badge_type="soft", dark=False):
-    dark_class = "dark" if dark else ""
-
-    return dedent(
-        f"""
-        <div class="metric-card {dark_class}">
-            <div class="metric-label">{title}</div>
-            <div class="metric-value">{value}</div>
-            <span class="metric-badge {badge_type}">{badge_text}</span>
-        </div>
-        """
-    )
-
-
-def sales_chart(df):
-    fig = go.Figure()
-
-    if not df.empty and "date" in df.columns and "total" in df.columns:
-        temp = df.copy()
-        temp["date"] = pd.to_datetime(temp["date"], errors="coerce")
-        temp["total"] = temp["total"].apply(to_float)
-        temp = temp.dropna(subset=["date"])
-        temp = temp.sort_values("date")
-
-        if not temp.empty:
-            daily = temp.groupby(temp["date"].dt.date, as_index=False)["total"].sum()
-            daily["date"] = pd.to_datetime(daily["date"])
-
-            fig.add_trace(
-                go.Scatter(
-                    x=daily["date"],
-                    y=daily["total"],
-                    mode="lines",
-                    line=dict(color="#02224F", width=3),
-                    fill="tozeroy",
-                    fillcolor="rgba(2,34,79,0.10)",
-                    name="Revenue",
-                )
-            )
-
-    fig.update_layout(
-        height=360,
-        margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        showlegend=False,
-        xaxis_title="",
-        yaxis_title="",
-        font=dict(color="#25343F"),
-    )
-
-    fig.update_xaxes(showgrid=False, color="#5E6B75")
-    fig.update_yaxes(showgrid=True, gridcolor="#E1E7EB", color="#5E6B75")
-
-    return fig
-
-
-def category_chart(products_df):
-    fig = go.Figure()
-
-    if not products_df.empty and "category" in products_df.columns:
-        temp = products_df.copy()
-        temp["category"] = temp["category"].fillna("Uncategorized")
-        temp["category"] = temp["category"].astype(str).apply(lambda x: x.split(",")[0].strip())
-        top = temp["category"].value_counts().head(5)
-
-        if not top.empty:
-            fig.add_trace(
-                go.Pie(
-                    labels=list(top.index),
-                    values=list(top.values),
-                    hole=0.62,
-                    textinfo="none",
-                    marker=dict(
-                        colors=["#02224F", "#25343F", "#BFC9D1", "#8EA1B2", "#D9E0E5"]
-                    ),
-                )
-            )
-
-    fig.update_layout(
-        height=260,
-        margin=dict(l=10, r=10, t=10, b=10),
-        showlegend=True,
-        legend=dict(font=dict(size=11, color="#25343F")),
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(color="#25343F"),
-    )
-
-    return fig
-
-
-def recent_orders_table(df):
-    if df.empty:
-        st.info("No orders found.")
+    if not check_login():
         return
 
-    required_cols = [
-        "order_id",
-        "date",
-        "customer",
-        "phone",
-        "city",
-        "product",
-        "sku",
-        "qty",
-        "total",
-        "status",
-    ]
+    selected_page = render_sidebar()
 
-    for col in required_cols:
-        if col not in df.columns:
-            df[col] = ""
-
-    table_df = df[required_cols].copy().head(8)
-    table_df["total"] = table_df["total"].apply(money)
-
-    st.dataframe(table_df, use_container_width=True, hide_index=True)
+    render_page(selected_page)
 
 
-load_css()
-render_sidebar("Dashboard")
-
-orders_raw = get_orders()
-products_raw = get_products()
-
-orders_df = normalize_orders(orders_raw)
-products_df = normalize_products(products_raw)
-
-left_head, right_head = st.columns([4, 1.3])
-
-with left_head:
-    html(
-        """
-        <div>
-            <div class="page-title">Dashboard</div>
-            <div class="page-subtitle">Welcome back. Here's what's happening with your business today.</div>
-        </div>
-        """
-    )
-
-with right_head:
-    html('<div class="search-box">Search anything...</div>')
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-total_sales = orders_df["total"].sum() if not orders_df.empty else 0
-total_orders = len(orders_df)
-
-if not orders_df.empty:
-    pending_shipments = orders_df["status"].astype(str).str.lower().isin(
-        ["processing", "pending", "on-hold", "pending payment"]
-    ).sum()
-else:
-    pending_shipments = 0
-
-if not products_df.empty:
-    low_stock = (products_df["stock_quantity"] <= 5).sum()
-else:
-    low_stock = 0
-
-c1, c2, c3, c4 = st.columns(4)
-
-with c1:
-    html(metric_card("Total Revenue", money(total_sales), "+ good growth", "success", True))
-
-with c2:
-    html(metric_card("Total Orders", f"{total_orders:,}", "live orders", "soft"))
-
-with c3:
-    html(metric_card("Pending Shipments", f"{pending_shipments:,}", "needs attention", "warn"))
-
-with c4:
-    html(metric_card("Low Stock", f"{low_stock:,}", "check inventory", "soft"))
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-main_col, side_col = st.columns([2.2, 1])
-
-with main_col:
-    html(
-        """
-        <div class="panel-card chart-head">
-            <div class="panel-title">Overview</div>
-            <div class="panel-subtitle">Revenue trend from your recent orders</div>
-        </div>
-        """
-    )
-
-    st.plotly_chart(sales_chart(orders_df), use_container_width=True)
-
-with side_col:
-    html(
-        """
-        <div class="panel-card chart-head">
-            <div class="panel-title">Top Categories</div>
-            <div class="panel-subtitle">Where your products are concentrated</div>
-        </div>
-        """
-    )
-
-    st.plotly_chart(category_chart(products_df), use_container_width=True)
-
-    with st.container(border=True):
-        st.markdown("### Monthly Goals")
-        st.caption("Track progress toward targets")
-
-        st.markdown("**Revenue**")
-        st.progress(78)
-        st.caption("Current progress: 78%")
-
-        st.markdown("**Orders**")
-        st.progress(64)
-        st.caption("Current progress: 64%")
-
-        st.markdown("**Inventory Health**")
-        st.progress(86)
-        st.caption("Current progress: 86%")
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-html(
-    """
-    <div class="table-card">
-        <div class="table-title">Recent Orders</div>
-        <div class="table-subtitle">Latest transactions from your store</div>
-    </div>
-    """
-)
-
-recent_orders_table(orders_df)
+if __name__ == "__main__":
+    main()
