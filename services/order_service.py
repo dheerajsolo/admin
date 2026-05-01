@@ -28,11 +28,16 @@ def get_orders(limit: int = 50) -> list[dict]:
     """
     Fetch orders from active data adapter.
 
-    Current mode:
-    - demo adapter for demo data
-    - woocommerce adapter for live read-only WooCommerce data
+    Compatible with both:
+    - adapter.fetch_orders()
+    - adapter.fetch_orders(limit)
     """
-    return get_data_adapter().fetch_orders(limit)
+    adapter = get_data_adapter()
+
+    try:
+        return adapter.fetch_orders(limit)
+    except TypeError:
+        return adapter.fetch_orders()
 
 
 def get_orders_df(limit: int = 50) -> pd.DataFrame:
